@@ -15,25 +15,25 @@ routes = Blueprint("routes", __name__)
 
 
 def register_routes(app):
-    def send_email(to_email, otp):
-        subject = "Your OTP Code"
-        body = f"Your OTP for verification is: {otp}"
+    # def send_email(to_email, otp):
+    #     subject = "Your OTP Code"
+    #     body = f"Your OTP for verification is: {otp}"
 
-        msg = MIMEText(body)
-        msg["Subject"] = subject
-        msg["From"] = Config.EMAIL_ADDRESS
-        msg["To"] = to_email
+    #     msg = MIMEText(body)
+    #     msg["Subject"] = subject
+    #     msg["From"] = Config.EMAIL_ADDRESS
+    #     msg["To"] = to_email
 
-        try:
-            server = smtplib.SMTP(Config.SMTP_SERVER, Config.SMTP_PORT)
-            server.starttls()
-            server.login(Config.EMAIL_ADDRESS, Config.EMAIL_PASSWORD)
-            server.sendmail(Config.EMAIL_ADDRESS, to_email, msg.as_string())
-            server.quit()
-            return True
-        except Exception as e:
-            print(f"Error sending email: {e}")
-            return False
+    #     try:
+    #         server = smtplib.SMTP(Config.SMTP_SERVER, Config.SMTP_PORT)
+    #         server.starttls()
+    #         server.login(Config.EMAIL_ADDRESS, Config.EMAIL_PASSWORD)
+    #         server.sendmail(Config.EMAIL_ADDRESS, to_email, msg.as_string())
+    #         server.quit()
+    #         return True
+    #     except Exception as e:
+    #         print(f"Error sending email: {e}")
+    #         return False
     # Home Route
     @app.route('/')
     def home():
@@ -41,13 +41,12 @@ def register_routes(app):
 
     
     # Route for email input page
-    @routes.route("/email-verification")
+    @app.route("/email-verification")
     def email_verification():
             return render_template("email_verification.html")
 
     # Route to send OTP
-    # ✅ Modify `send_otp()` to store OTP in the database
-    @routes.route("/send_otp", methods=["POST"])
+    @app.route("/send_otp", methods=["POST"])
     def send_otp():
         email = request.form.get("email")
         
@@ -57,21 +56,20 @@ def register_routes(app):
 
         otp = random.randint(100000, 999999)  # Generate OTP
 
-        # ✅ Store OTP in the database instead of session
         cur = mysql.connection.cursor()
         cur.execute("UPDATE users SET otp = %s WHERE email = %s", (otp, email))
         mysql.connection.commit()
         cur.close()
 
-        if send_email(email, otp):
-            flash("OTP sent to your email", "success")
-            return redirect(url_for("verify_otp"))
-        else:
-            flash("Failed to send OTP. Try again.", "danger")
-            return redirect(url_for("email_verification"))
+        # if send_email(email, otp):
+        #     flash("OTP sent to your email", "success")
+        #     return redirect(url_for("verify_otp"))
+        # else:
+        #     flash("Failed to send OTP. Try again.", "danger")
+        #     return redirect(url_for("email_verification"))
 
-    # ✅ Modify `verify_otp()` to check OTP from the database
-    @routes.route("/verify_otp", methods=["POST"])
+
+    @app.route("/verify_otp", methods=["POST"])
     def verify_otp():
         email = request.form.get("email")
         user_otp = request.form.get("otp")
@@ -85,7 +83,7 @@ def register_routes(app):
             flash("Invalid OTP. Try again.", "danger")
             return redirect(url_for("verify_otp"))
 
-        # ✅ Clear OTP from the database after successful verification
+        
         cur = mysql.connection.cursor()
         cur.execute("UPDATE users SET otp = NULL WHERE email = %s", (email,))
         mysql.connection.commit()
@@ -94,31 +92,30 @@ def register_routes(app):
         flash("Email verified successfully!", "success")
         return redirect(url_for("email_verification"))
 
-    # ✅ Modify `register()` to validate OTP from the database
     @app.route('/register', methods=['GET', 'POST'])
     def register():
         if request.method == 'POST':
             email = request.form.get("email")
-            otp = request.form.get("otp")
+            # otp = request.form.get("otp")
             password = request.form.get("password")
             confirm_password = request.form.get("confirm_password")
 
-            # ✅ Fetch OTP from database
-            cur = mysql.connection.cursor()
-            cur.execute("SELECT otp FROM users WHERE email = %s", (email,))
-            result = cur.fetchone()
-            cur.close()
+    
+            # cur = mysql.connection.cursor()
+            # cur.execute("SELECT otp FROM users WHERE email = %s", (email,))
+            # result = cur.fetchone()
+            # cur.close()
 
-            if not result or str(result[0]) != str(otp):
-                flash("Invalid OTP. Please verify your email first.", "danger")
-                return redirect(url_for("register"))
+            # if not result or str(result[0]) != str(otp):
+            #     flash("Invalid OTP. Please verify your email first.", "danger")
+            #     return redirect(url_for("register"))
 
-            # ✅ Check Password Matching
+            
             if password != confirm_password:
                 flash("Passwords do not match. Please try again.", "danger")
                 return redirect(url_for('register'))
 
-            # ✅ Hash Password & Insert into DB
+          
             hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
             cur = mysql.connection.cursor()
             cur.execute("UPDATE users SET password = %s, otp = NULL WHERE email = %s", (hashed_password, email))
@@ -154,7 +151,7 @@ def register_routes(app):
         return render_template('login.html')
 
 
-    # ✅ Modify `dashboard()` to use `current_user.email`
+    
     @app.route('/dashboard')
     @login_required
     def dashboard():
