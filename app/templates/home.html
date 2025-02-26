@@ -40,8 +40,9 @@
 
 <!-- Login & Register Buttons -->
 <div class="container d-flex justify-content-center mt-3">
-    <a class="btn btn-outline-secondary me-2 px-4 py-2" href="{{ url_for('login') }}">Login</a>
-    <a class="btn btn-outline-secondary px-4 py-2" href="{{ url_for('register') }}">Register</a>
+<a class="btn btn-outline-secondary me-2 px-4 py-2" href="{{ url_for('routes.login') }}">Login</a>
+
+    <a class="btn btn-outline-secondary px-4 py-2" href="{{ url_for('routes.register') }}">Register</a>
 </div>
 {% endblock %}
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>

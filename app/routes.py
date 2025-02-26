@@ -1,166 +1,84 @@
-from flask import render_template, redirect, url_for, request, flash, Blueprint, session, jsonify
-from flask_login import login_user, login_required, logout_user, current_user
-from app import mysql, bcrypt, User
-from validate_email_address import validate_email
-import dns.resolver
-import smtplib
-import random
-from email.mime.text import MIMEText
-from app.config import Config
+from flask import render_template, redirect, url_for, request, flash, Blueprint
+from app.models import User
+from app import db, bcrypt  # Importing bcrypt from extensions
 
-# Create a Blueprint for routes
 routes = Blueprint("routes", __name__)
 
-
-
-
 def register_routes(app):
-    # def send_email(to_email, otp):
-    #     subject = "Your OTP Code"
-    #     body = f"Your OTP for verification is: {otp}"
+    app.register_blueprint(routes)
 
-    #     msg = MIMEText(body)
-    #     msg["Subject"] = subject
-    #     msg["From"] = Config.EMAIL_ADDRESS
-    #     msg["To"] = to_email
-
-    #     try:
-    #         server = smtplib.SMTP(Config.SMTP_SERVER, Config.SMTP_PORT)
-    #         server.starttls()
-    #         server.login(Config.EMAIL_ADDRESS, Config.EMAIL_PASSWORD)
-    #         server.sendmail(Config.EMAIL_ADDRESS, to_email, msg.as_string())
-    #         server.quit()
-    #         return True
-    #     except Exception as e:
-    #         print(f"Error sending email: {e}")
-    #         return False
-    # Home Route
-    @app.route('/')
-    def home():
-        return render_template('home.html')
-
-    
-    # Route for email input page
-    @app.route("/email-verification")
-    def email_verification():
-            return render_template("email_verification.html")
-
-    # Route to send OTP
-    @app.route("/send_otp", methods=["POST"])
-    def send_otp():
+@routes.route('/register', methods=['GET', 'POST'])
+def register():
+    print("Register route accessed")  # Debugging
+    if request.method == 'POST':
         email = request.form.get("email")
+        password = request.form.get("password")
+        confirm_password = request.form.get("confirm_password")
+        print(f"{email},{password},{confirm_password}")
+
+        # validation
+        if not email or not password or not confirm_password:
+            flash("Please fill in all fields", "danger")
+            return redirect(url_for('routes.register'))
         
-        if not email:
-            flash("Email is required", "danger")
-            return redirect(url_for("email_verification"))
+        if password != confirm_password:
+            flash("Passwords do not match", "danger")
+            print('error')
+            return redirect(url_for('routes.register'))
+       
+        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
 
-        otp = random.randint(100000, 999999)  # Generate OTP
+        # Create new user object
+        new_user = User(email=email, password=hashed_password)
 
-        cur = mysql.connection.cursor()
-        cur.execute("UPDATE users SET otp = %s WHERE email = %s", (otp, email))
-        mysql.connection.commit()
-        cur.close()
+        try:
+            db.session.add(new_user)
+            db.session.commit()
+            flash("Registration successful!", "success")
+            print("User registered successfully!") 
+            return redirect(url_for('routes.login'))  # Redirect to login page
+            # return redirect(url_for('routes.register'))
+        except:
+            db.session.rollback()
+            flash("Email already registered!", "danger")
+            return redirect(url_for('routes.register'))
+        finally:
+            db.session.close()  
 
-        # if send_email(email, otp):
-        #     flash("OTP sent to your email", "success")
-        #     return redirect(url_for("verify_otp"))
-        # else:
-        #     flash("Failed to send OTP. Try again.", "danger")
-        #     return redirect(url_for("email_verification"))
-
-
-    @app.route("/verify_otp", methods=["POST"])
-    def verify_otp():
-        email = request.form.get("email")
-        user_otp = request.form.get("otp")
-
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT otp FROM users WHERE email = %s", (email,))
-        result = cur.fetchone()
-        cur.close()
-
-        if not result or str(result[0]) != str(user_otp):
-            flash("Invalid OTP. Try again.", "danger")
-            return redirect(url_for("verify_otp"))
-
-        
-        cur = mysql.connection.cursor()
-        cur.execute("UPDATE users SET otp = NULL WHERE email = %s", (email,))
-        mysql.connection.commit()
-        cur.close()
-
-        flash("Email verified successfully!", "success")
-        return redirect(url_for("email_verification"))
-
-    @app.route('/register', methods=['GET', 'POST'])
-    def register():
-        if request.method == 'POST':
-            email = request.form.get("email")
-            # otp = request.form.get("otp")
-            password = request.form.get("password")
-            confirm_password = request.form.get("confirm_password")
-
+    return render_template('register.html')
+@routes.route('/verify_email/<token>')
+def verify_email(token):
     
-            # cur = mysql.connection.cursor()
-            # cur.execute("SELECT otp FROM users WHERE email = %s", (email,))
-            # result = cur.fetchone()
-            # cur.close()
+    return redirect(url_for('routes.login'))
 
-            # if not result or str(result[0]) != str(otp):
-            #     flash("Invalid OTP. Please verify your email first.", "danger")
-            #     return redirect(url_for("register"))
+@routes.route('/resend_verification', methods=['GET', 'POST'])
+def resend_verification():
+   
+    return render_template('resend_verification.html')
 
-            
-            if password != confirm_password:
-                flash("Passwords do not match. Please try again.", "danger")
-                return redirect(url_for('register'))
 
-          
-            hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
-            cur = mysql.connection.cursor()
-            cur.execute("UPDATE users SET password = %s, otp = NULL WHERE email = %s", (hashed_password, email))
-            mysql.connection.commit()
-            cur.close()
+@routes.route('/email-verification')
+def email_verification():
+    return render_template('email_verification.html')
 
-            flash("Registration successful! Please log in.", "success")
-            return redirect(url_for('login'))
-
-        return render_template('register.html')
-
+@routes.route('/send_otp', methods=["POST"])
+def send_otp():
     
+        return redirect(url_for("routes.email_verification"))
 
-    # Login Route
-    @app.route('/login', methods=['GET', 'POST'])
-    def login():
-        if request.method == 'POST':
-            email = request.form['email']
-            password = request.form['password']
-
-            cur = mysql.connection.cursor()
-            cur.execute("SELECT id, password FROM users WHERE email = %s", (email,))
-            user = cur.fetchone()
-            cur.close()
-
-            if user and bcrypt.check_password_hash(user[1], password):
-                login_user(User(user[0], email))
-                flash("Login successful!", "success")
-                return redirect(url_for('dashboard'))
-            else:
-                flash("Invalid credentials, please try again.", "danger")
-
-        return render_template('login.html')
+@routes.route('/verify_otp', methods=["POST"])
+def verify_otp():
+  
+    return redirect(url_for("routes.email_verification"))
 
 
+@routes.route('/login', methods=['GET', 'POST'])
+def login():
     
-    @app.route('/dashboard')
-    @login_required
-    def dashboard():
-        return f"Welcome, {current_user.email}! <a href='/logout'>Logout</a>"
+    return render_template('login.html')
 
-    # Logout Route
-    @app.route('/logout')
-    @login_required
-    def logout():
-        logout_user()
-        flash("You have been logged out.", "info")
-        return redirect(url_for('login'))
+
+@routes.route('/')
+def home():
+    return render_template('home.html')
+
