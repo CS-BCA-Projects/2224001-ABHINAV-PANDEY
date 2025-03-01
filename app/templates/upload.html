@@ -1,0 +1,33 @@
+{% extends "Home.html" %}
+{% block body %}
+<div class="container mt-5">
+    <div class="row">
+        <!-- Left Side: User Profile Section -->
+        <div class="col-md-4">
+            <div class="card p-4 shadow">
+                <h4 class="text-center">User Profile</h4>
+                <hr>
+                <p><strong>Name:</strong> {{ user.name }}</p>
+                <p><strong>Email:</strong> {{ user.email }}</p>
+                <a href="{{ url_for('routes.logout') }}" class="btn btn-danger w-100">Logout</a>
+            </div>
+        </div>
+
+        <!-- Right Side: File Upload Section -->
+        <div class="col-md-8">
+            <div class="card p-4 shadow">
+                <h4 class="text-center">Upload File for Processing</h4>
+                <hr>
+                <form action="{{ url_for('routes.upload') }}" method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+<label for="file" class="form-label">Choose file to upload:</label>
+<input type="file" class="form-control" id="file" name="file" accept="*/*" required>
+
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Upload & Process</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

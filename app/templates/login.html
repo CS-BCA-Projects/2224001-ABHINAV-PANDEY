@@ -5,17 +5,27 @@
             <div class="col-md-4">
                 <div class="card p-4 shadow">
                     <h3 class="text-center mb-3">Login</h3>
-                    <form method="POST" action="{{url_for('routes.login')}}">
+
+                    <!-- Flash Messages for Errors (Invalid Credentials, Unverified Email, etc.) -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }}">{{ message }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST" action="{{ url_for('routes.login') }}">
                         <div class="mb-3">
                             <label for="email" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="email" name="email" placeholder="Enter email">
+                            <input type="email" class="form-control" id="email" name="email" placeholder="Enter email" required>
                         </div>
                         <div class="mb-3">
                             <label for="password" class="form-label">Password</label>
                             <input type="password" class="form-control" id="password" name="password" placeholder="Enter password" required>
                         </div>
                         <button type="submit" class="btn btn-primary w-100">Login</button>
-
+            
                     </form>
                 </div>
             </div>
