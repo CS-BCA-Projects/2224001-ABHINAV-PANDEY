@@ -121,6 +121,12 @@ def login():
 def dashboard():
     user = User.query.get(session['user_id'])  # Get logged-in user
     return render_template("dashboard.html", user=user)
+from flask import send_from_directory
+
+@routes.route('/static/<path:filename>')
+def static_files(filename):
+    return send_from_directory('static', filename)
+
 @routes.route('/logout', methods=['GET'])
 def logout():
     session.pop('user_id', None)
