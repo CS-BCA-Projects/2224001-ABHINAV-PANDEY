@@ -10,6 +10,7 @@
 
 <body>
 
+<<<<<<< HEAD
    <!-- Navbar -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid">
@@ -44,6 +45,64 @@
                     </ul>
                 </li>
             </ul>
+=======
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <!-- Sidebar Toggle Button -->
+            <button id="sidebarCollapse" aria-label="Toggle Sidebar">
+                <i class="fas fa-bars"></i>
+            </button>
+
+            <a class="navbar-brand" href="#">Gender Recognition System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#about">About</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#contact">Contact</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar (Hidden Before Login) -->
+    {% if session.get('user_id') %}
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-nav">
+
+
+            <!-- User Profile (Avatar + Email) -->
+            <div class="sidebar-item d-flex align-items-center">
+                <div>
+                    <span class="fw-bold">
+                    </span>
+                    <small class="d-block text-muted">Logged in</small>
+                </div>
+            </div>
+
+
+            <!-- Copyright -->
+            <a class="sidebar-item" href="#">
+                <i class="fa fa-copyright sidebar-icon"></i>
+                <span>Copyright</span>
+            </a>
+
+            <!-- Logout Button -->
+            <a class="sidebar-item text-danger" href="{{ url_for('routes.logout') }}">
+                <i class="fa fa-sign-out-alt sidebar-icon"></i>
+                <span>Logout</span>
+            </a>
+>>>>>>> working
         </div>
     </div>
 </nav>
