@@ -1,14 +1,27 @@
-from flask import Blueprint, request, render_template, flash, redirect, url_for, session
+from flask import Blueprint, request, render_template, flash, redirect, url_for, session, send_from_directory, current_app 
 from flask_mail import Message
-from werkzeug.security import generate_password_hash, check_password_hash
 from app import mail, generate_verification_token, confirm_verification_token
 from app.models import User
-from app import db, bcrypt  # Importing bcrypt from extensions
+from app import db, bcrypt
+from werkzeug.utils import secure_filename
+import os, cv2, numpy as np
+
 
 routes = Blueprint("routes", __name__)
 
 def register_routes(app):
     app.register_blueprint(routes)
+
+def allowed_file(filename):
+    """Check if the uploaded file has an allowed extension."""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
+
+# Function to check image blurriness
+def is_blurry(image_path, threshold=5000):
+    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)  # Convert to grayscale
+    laplacian_var = cv2.Laplacian(image, cv2.CV_64F).var()  # Compute Laplacian variance
+    print(f"laplacian Variance:{laplacian_var}")
+    return laplacian_var < threshold  # Return True if blurry
 
 @routes.route('/register', methods=['GET', 'POST'])
 def register():
@@ -109,19 +122,34 @@ def login():
 
         if bcrypt.check_password_hash(user.password, password):
             session['user_id'] = user.id
-            flash("Login successful!", "success")
-            return redirect(url_for('routes.dashboard'))
+            return redirect(url_for('routes.upload'))
         else:
             flash("Invalid password!", "danger")
 
     return render_template("login.html")
 
 
-@routes.route('/dashboard', methods=['GET', 'POST'])
-def dashboard():
-    user = User.query.get(session['user_id'])  # Get logged-in user
-    return render_template("dashboard.html", user=user)
-from flask import send_from_directory
+@routes.route('/upload', methods=['GET', 'POST'])
+def upload():
+    if 'user_id' not in session:
+        flash("You must be logged in to access this page!", "danger")
+        return redirect(url_for('routes.login'))
+    
+    if request.method == 'POST':
+        file = request.files['file-upload']
+        filename = secure_filename(file.filename)
+        file_path = (os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
+        file.save(file_path)
+         # ✅ Check for blurriness
+        if is_blurry(file_path):
+            os.remove(file_path)  # Delete blurry image
+            flash("Image is too blurry! Please upload a clear image.", "warning")
+            return redirect(url_for('routes.upload'))
+        
+        flash("File uploaded successfully!", "success")  # ✅ Success message
+        return redirect(url_for('routes.upload'))
+    return render_template("upload.html")
+
 
 @routes.route('/static/<path:filename>')
 def static_files(filename):
@@ -131,14 +159,6 @@ def static_files(filename):
 def logout():
     session.pop('user_id', None)
     return redirect(url_for('routes.login'))
-@routes.route('/upload', methods=['GET', 'POST'])
-def upload():
-    # if request.method == 'POST':
-    #     file = request.files['file']
-    #     filename = secure_filename(file.filename)
-    #     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-    #     return redirect(url_for('routes.dashboard'))
-    return render_template("upload.html")
 
 @routes.route('/')
 def home():
