@@ -17,11 +17,32 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
 
 # Function to check image blurriness
-def is_blurry(image_path, threshold=5000):
-    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)  # Convert to grayscale
-    laplacian_var = cv2.Laplacian(image, cv2.CV_64F).var()  # Compute Laplacian variance
-    print(f"laplacian Variance:{laplacian_var}")
-    return laplacian_var < threshold  # Return True if blurry
+def is_blurry(image_path, threshold=100):
+    """Check if the detected face(s) in the image are blurry."""
+    image = cv2.imread(image_path)
+    if image is None:
+        print(f"Could not read image: {image_path}")
+        return True  # Treat unreadable images as blurry
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Load OpenCV's face detector
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+
+    if len(faces) == 0:
+        print("No face detected in image.")
+        return True  # No face detected means we reject the image
+
+    for (x, y, w, h) in faces:
+        face_region = gray[y:y+h, x:x+w]  # Crop the detected face
+        laplacian_var = cv2.Laplacian(face_region, cv2.CV_64F).var()
+
+        print(f"Laplacian Variance (Face): {laplacian_var}")  # Debugging
+        if laplacian_var < threshold:
+            return True  # Blurry face detected
+
+    return False  # At least one face is clear
 
 @routes.route('/register', methods=['GET', 'POST'])
 def register():
@@ -140,11 +161,13 @@ def upload():
         filename = secure_filename(file.filename)
         file_path = (os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
         file.save(file_path)
-         # ✅ Check for blurriness
+       
+
+        # ✅ Check if the detected face is blurry (ignore background)
         if is_blurry(file_path):
             os.remove(file_path)  # Delete blurry image
-            flash("Image is too blurry! Please upload a clear image.", "warning")
-            return redirect(url_for('routes.upload'))
+            flash("Upload failed: The face in the image is blurry! Please upload a clear image.", "danger")
+            return redirect(request.url)
         
         flash("File uploaded successfully!", "success")  # ✅ Success message
         return redirect(url_for('routes.upload'))
