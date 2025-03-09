@@ -16,12 +16,107 @@ def allowed_file(filename):
     """Check if the uploaded file has an allowed extension."""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
 
-# Function to check image blurriness
-def is_blurry(image_path, threshold=5000):
-    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)  # Convert to grayscale
-    laplacian_var = cv2.Laplacian(image, cv2.CV_64F).var()  # Compute Laplacian variance
-    print(f"laplacian Variance:{laplacian_var}")
-    return laplacian_var < threshold  # Return True if blurry
+def check_image_quality(image):
+    """
+    Checks the quality of an image based on sharpness, brightness, and contrast.
+
+    Returns:
+    - status (str): "Good" if quality is okay, otherwise "Bad"
+    - message (str): Description of the issue
+    """
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # 1️⃣ **Check Sharpness (Blurriness)**
+    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+    print(laplacian_var)
+    if laplacian_var < 1700:  
+        return False, f"Image is too blurry! (Sharpness Score: {laplacian_var:.2f})"
+
+    # 2️⃣ **Check Brightness**
+    brightness = np.mean(gray)
+    if brightness < 40:
+        return False, f"Image is too dark! (Brightness: {brightness:.2f})"
+    elif brightness > 200:
+        return False, f"Image is overexposed! (Brightness: {brightness:.2f})"
+
+    # 3️⃣ **Check Image Resolution**
+    h, w = image.shape[:2]
+    if h < 512 or w < 512:
+        image = cv2.resize(image, (512, 512), interpolation=cv2.INTER_AREA)
+        return True, "Good"
+
+    return True, "Good"
+
+def detect_faces_dnn(image_path, confidence_threshold=0.2, min_faces=1):
+    """
+    Detects faces in an image using OpenCV's DNN face detector.
+
+    Parameters:
+    - image_path (str): Path to the input image.
+    - confidence_threshold (float): Minimum confidence for detecting a face.
+    - min_faces (int): Minimum number of faces required for successful detection.
+
+    Returns:
+    - detected_image (numpy.ndarray): Image with detected faces drawn.
+    - face_boxes (list): List of detected face bounding boxes [(x, y, x1, y1)].
+    - status (str): "Success" if all faces detected properly, "Failed" otherwise.
+    """
+    # Read the image
+    image = cv2.imread(image_path)
+    if image is None:
+        raise ValueError(f"Image not found: {image_path}")
+    
+    # **Check Image Quality First**
+    quality_status, message = check_image_quality(image)
+    if quality_status == False:
+        return f"⚠️ Image Rejected: {message}"
+
+    print("✅ Image Quality Check Passed. Proceeding with detection...")
+    # Load the pre-trained DNN model
+    prototxt_path = os.path.join(current_app.root_path, "models/deploy.prototxt")
+    model_path = os.path.join(current_app.root_path, "models/res10_300x300_ssd_iter_140000.caffemodel")
+
+    if not os.path.exists(prototxt_path) or not os.path.exists(model_path):
+        raise FileNotFoundError("Model files not found! Check 'models' directory.")
+
+    net = cv2.dnn.readNetFromCaffe(prototxt_path, model_path)
+
+    
+
+    (h, w) = image.shape[:2]
+
+    # Try different scales
+    for scale in [400, 600, 800]:  # Process at different sizes
+        resized_image = cv2.resize(image, (scale, scale))
+        blob = cv2.dnn.blobFromImage(resized_image, scalefactor=1.0, size=(scale, scale), 
+                                     mean=(104.0, 177.0, 123.0), swapRB=False, crop=False)
+        net.setInput(blob)
+        detections = net.forward()
+
+        face_boxes = []
+        detected_faces = 0
+
+        for i in range(detections.shape[2]):
+            confidence = detections[0, 0, i, 2]
+            if confidence > confidence_threshold:
+                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+                (x, y, x1, y1) = box.astype("int")
+                face_boxes.append((x, y, x1, y1))
+                detected_faces += 1
+
+                # Draw rectangle
+                cv2.rectangle(image, (x, y), (x1, y1), (0, 255, 0), 2)
+                text = f"{confidence*100:.2f}%"
+                cv2.putText(image, text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 
+                            0.5, (0, 255, 0), 2)
+
+        if detected_faces >= min_faces:
+            print(f"✅ {detected_faces} faces detected. Accepting image.")
+            return image, face_boxes, "Success"
+
+    print(f"⚠️ Faces detected: {detected_faces}. Rejecting image!")
+    return None, [], "Failed"
 
 @routes.route('/register', methods=['GET', 'POST'])
 def register():
@@ -140,13 +235,30 @@ def upload():
         filename = secure_filename(file.filename)
         file_path = (os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
         file.save(file_path)
-         # ✅ Check for blurriness
-        if is_blurry(file_path):
-            os.remove(file_path)  # Delete blurry image
-            flash("Image is too blurry! Please upload a clear image.", "warning")
+        
+        # ✅ Read image properly before checking quality
+        image = cv2.imread(file_path)
+        if image is None:
+            flash("Invalid image file!", "danger")
             return redirect(url_for('routes.upload'))
         
-        flash("File uploaded successfully!", "success")  # ✅ Success message
+        # ✅ Check image quality
+        quality_status, message = check_image_quality(image)
+        if quality_status == False:
+            os.remove(file_path)  # Delete the image
+            flash(f"Image quality is too low: {message}", "warning")
+            return redirect(url_for('routes.upload'))
+
+        # ✅ Detect Faces
+        image, face_boxes, status = detect_faces_dnn(file_path)
+        if status == "Failed" or len(face_boxes) == 0:
+            os.remove(file_path)  # Delete the image
+            flash("No clear human faces detected! Please upload a better image.", "warning")
+            return redirect(url_for('routes.upload'))
+        
+
+        # ✅ Show success message
+        flash(f"Image uploaded successfully! {len(face_boxes)} clear face(s) detected.", "success")
         return redirect(url_for('routes.upload'))
     return render_template("upload.html")
 
