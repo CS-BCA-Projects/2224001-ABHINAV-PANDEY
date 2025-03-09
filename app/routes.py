@@ -65,28 +65,58 @@ def detect_faces_dnn(image_path, confidence_threshold=0.2, min_faces=1):
     # Read the image
     image = cv2.imread(image_path)
     if image is None:
-        print(f"Could not read image: {image_path}")
-        return True  # Treat unreadable images as blurry
+        raise ValueError(f"Image not found: {image_path}")
+    
+    # **Check Image Quality First**
+    quality_status, message = check_image_quality(image)
+    if quality_status == False:
+        return f"⚠️ Image Rejected: {message}"
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    print("✅ Image Quality Check Passed. Proceeding with detection...")
+    # Load the pre-trained DNN model
+    prototxt_path = os.path.join(current_app.root_path, "models/deploy.prototxt")
+    model_path = os.path.join(current_app.root_path, "models/res10_300x300_ssd_iter_140000.caffemodel")
 
-    # Load OpenCV's face detector
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    if not os.path.exists(prototxt_path) or not os.path.exists(model_path):
+        raise FileNotFoundError("Model files not found! Check 'models' directory.")
 
-    if len(faces) == 0:
-        print("No face detected in image.")
-        return True  # No face detected means we reject the image
+    net = cv2.dnn.readNetFromCaffe(prototxt_path, model_path)
 
-    for (x, y, w, h) in faces:
-        face_region = gray[y:y+h, x:x+w]  # Crop the detected face
-        laplacian_var = cv2.Laplacian(face_region, cv2.CV_64F).var()
+    
 
-        print(f"Laplacian Variance (Face): {laplacian_var}")  # Debugging
-        if laplacian_var < threshold:
-            return True  # Blurry face detected
+    (h, w) = image.shape[:2]
 
-    return False  # At least one face is clear
+    # Try different scales
+    for scale in [400, 600, 800]:  # Process at different sizes
+        resized_image = cv2.resize(image, (scale, scale))
+        blob = cv2.dnn.blobFromImage(resized_image, scalefactor=1.0, size=(scale, scale), 
+                                     mean=(104.0, 177.0, 123.0), swapRB=False, crop=False)
+        net.setInput(blob)
+        detections = net.forward()
+
+        face_boxes = []
+        detected_faces = 0
+
+        for i in range(detections.shape[2]):
+            confidence = detections[0, 0, i, 2]
+            if confidence > confidence_threshold:
+                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+                (x, y, x1, y1) = box.astype("int")
+                face_boxes.append((x, y, x1, y1))
+                detected_faces += 1
+
+                # Draw rectangle
+                cv2.rectangle(image, (x, y), (x1, y1), (0, 255, 0), 2)
+                text = f"{confidence*100:.2f}%"
+                cv2.putText(image, text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 
+                            0.5, (0, 255, 0), 2)
+
+        if detected_faces >= min_faces:
+            print(f"✅ {detected_faces} faces detected. Accepting image.")
+            return image, face_boxes, "Success"
+
+    print(f"⚠️ Faces detected: {detected_faces}. Rejecting image!")
+    return None, [], "Failed"
 
 @routes.route('/register', methods=['GET', 'POST'])
 def register():
@@ -205,15 +235,30 @@ def upload():
         filename = secure_filename(file.filename)
         file_path = (os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
         file.save(file_path)
-       
-
-        # ✅ Check if the detected face is blurry (ignore background)
-        if is_blurry(file_path):
-            os.remove(file_path)  # Delete blurry image
-            flash("Upload failed: The face in the image is blurry! Please upload a clear image.", "danger")
-            return redirect(request.url)
         
-        flash("File uploaded successfully!", "success")  # ✅ Success message
+        # ✅ Read image properly before checking quality
+        image = cv2.imread(file_path)
+        if image is None:
+            flash("Invalid image file!", "danger")
+            return redirect(url_for('routes.upload'))
+        
+        # ✅ Check image quality
+        quality_status, message = check_image_quality(image)
+        if quality_status == False:
+            os.remove(file_path)  # Delete the image
+            flash(f"Image quality is too low: {message}", "warning")
+            return redirect(url_for('routes.upload'))
+
+        # ✅ Detect Faces
+        image, face_boxes, status = detect_faces_dnn(file_path)
+        if status == "Failed" or len(face_boxes) == 0:
+            os.remove(file_path)  # Delete the image
+            flash("No clear human faces detected! Please upload a better image.", "warning")
+            return redirect(url_for('routes.upload'))
+        
+
+        # ✅ Show success message
+        flash(f"Image uploaded successfully! {len(face_boxes)} clear face(s) detected.", "success")
         return redirect(url_for('routes.upload'))
     return render_template("upload.html")
 
