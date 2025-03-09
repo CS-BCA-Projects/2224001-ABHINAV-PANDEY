@@ -16,9 +16,53 @@ def allowed_file(filename):
     """Check if the uploaded file has an allowed extension."""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
 
-# Function to check image blurriness
-def is_blurry(image_path, threshold=100):
-    """Check if the detected face(s) in the image are blurry."""
+def check_image_quality(image):
+    """
+    Checks the quality of an image based on sharpness, brightness, and contrast.
+
+    Returns:
+    - status (str): "Good" if quality is okay, otherwise "Bad"
+    - message (str): Description of the issue
+    """
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # 1️⃣ **Check Sharpness (Blurriness)**
+    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+    print(laplacian_var)
+    if laplacian_var < 1700:  
+        return False, f"Image is too blurry! (Sharpness Score: {laplacian_var:.2f})"
+
+    # 2️⃣ **Check Brightness**
+    brightness = np.mean(gray)
+    if brightness < 40:
+        return False, f"Image is too dark! (Brightness: {brightness:.2f})"
+    elif brightness > 200:
+        return False, f"Image is overexposed! (Brightness: {brightness:.2f})"
+
+    # 3️⃣ **Check Image Resolution**
+    h, w = image.shape[:2]
+    if h < 512 or w < 512:
+        image = cv2.resize(image, (512, 512), interpolation=cv2.INTER_AREA)
+        return True, "Good"
+
+    return True, "Good"
+
+def detect_faces_dnn(image_path, confidence_threshold=0.2, min_faces=1):
+    """
+    Detects faces in an image using OpenCV's DNN face detector.
+
+    Parameters:
+    - image_path (str): Path to the input image.
+    - confidence_threshold (float): Minimum confidence for detecting a face.
+    - min_faces (int): Minimum number of faces required for successful detection.
+
+    Returns:
+    - detected_image (numpy.ndarray): Image with detected faces drawn.
+    - face_boxes (list): List of detected face bounding boxes [(x, y, x1, y1)].
+    - status (str): "Success" if all faces detected properly, "Failed" otherwise.
+    """
+    # Read the image
     image = cv2.imread(image_path)
     if image is None:
         print(f"Could not read image: {image_path}")
