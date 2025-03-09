@@ -17,13 +17,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
 
 def check_image_quality(image):
-    """
-    Checks the quality of an image based on sharpness, brightness, and contrast.
-
-    Returns:
-    - status (str): "Good" if quality is okay, otherwise "Bad"
-    - message (str): Description of the issue
-    """
+   
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
