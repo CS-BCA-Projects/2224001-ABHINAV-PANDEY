@@ -23,7 +23,9 @@ def create_app():
     with app.app_context():
         from app.routes import register_routes
     
-    db.create_all()  # Ensure all tables are created if they don't exist
+    with app.app_context():
+        db.create_all()  # Ensure all tables are created if they don't exist
+
 
 
 
