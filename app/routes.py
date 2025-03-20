@@ -22,7 +22,7 @@ def check_image_quality(image):
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
-    # 1️⃣ **Check Sharpness (Blurriness)**
+   
     laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
     print(laplacian_var)
     if laplacian_var < 50:  
