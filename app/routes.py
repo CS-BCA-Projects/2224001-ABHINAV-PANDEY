@@ -25,7 +25,7 @@ def check_image_quality(image):
     # 1️⃣ **Check Sharpness (Blurriness)**
     laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
     print(laplacian_var)
-    if laplacian_var < 1700:  
+    if laplacian_var < 50:  
         return False, f"Image is too blurry! (Sharpness Score: {laplacian_var:.2f})"
 
     # 2️⃣ **Check Brightness**
@@ -111,7 +111,7 @@ def detect_faces_dnn(image_path, confidence_threshold=0.2, min_faces=1):
 def detect_genders(image_path, face_boxes):
     image = cv2.imread(image_path)
     if image is None:
-        return jsonify({"error": "Image could not be loaded."})
+        return {"error": "Image could not be loaded."}
 
     male_count = 0
     female_count = 0
@@ -122,14 +122,26 @@ def detect_genders(image_path, face_boxes):
         if face.size == 0:  
             continue  # Skip if invalid face extraction
 
-        face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
         try:
-            analysis = DeepFace.analyze(face_rgb, actions=['gender'], enforce_detection=False)
-            gender = analysis[0]['dominant_gender']  # Get dominant gender
+            # Resize face to ensure a standardized input size
+            face_resized = cv2.resize(face, (224, 224))  
 
-            if gender == "Man":
+            # Convert BGR to RGB as DeepFace expects RGB images
+            face_rgb = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB)
+
+            # Perform gender analysis with DeepFace
+            analysis = DeepFace.analyze(face_rgb, actions=['gender'], enforce_detection=False)
+
+            # Extract the detected gender
+            gender = analysis[0]['dominant_gender']  
+            
+            print(f"Detected Gender: {gender}")  # Debugging output
+
+            # Normalize gender classification to prevent mislabeling
+            gender = gender.lower()
+            if "man" in gender:
                 male_count += 1
-            elif gender == "Woman":
+            elif "woman" in gender:
                 female_count += 1
             else:
                 unidentified_count += 1
@@ -138,7 +150,7 @@ def detect_genders(image_path, face_boxes):
             print(f"Error in gender detection: {e}")
             unidentified_count += 1  # Count as unidentified if analysis fails
 
-    return  {
+    return {
         "male": male_count,
         "female": female_count,
         "unidentified": unidentified_count
@@ -283,12 +295,6 @@ def upload():
             flash("Invalid image file!", "danger")
             return redirect(url_for('routes.upload'), genders=genders)
         
-        # ✅ Check image quality
-        quality_status, message = check_image_quality(image)
-        if quality_status == False:
-            os.remove(file_path)  # Delete the image
-            flash(f"{message}", "warning")
-            return redirect(url_for('routes.upload'),  genders=genders)
 
         # ✅ Detect Faces
         image, face_boxes, status = detect_faces_dnn(file_path)

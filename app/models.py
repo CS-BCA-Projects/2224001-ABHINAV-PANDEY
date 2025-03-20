@@ -11,10 +11,6 @@ class User(db.Model):
         return f"<User {self.email}>"
 
 
-#     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)  # Corrected reference
-#     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)  # Corrected reference
-#     name = db.Column(db.String(100))
-
 class GenderRecognition(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # Corrected reference
