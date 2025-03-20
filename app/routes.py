@@ -1,11 +1,12 @@
-from flask import Blueprint, request, render_template, flash, redirect, url_for, session, send_from_directory, current_app 
+from flask import jsonify, Blueprint, request, render_template, flash, redirect, url_for, session, send_from_directory, current_app 
 from flask_mail import Message
 from app import mail, generate_verification_token, confirm_verification_token
 from app.models import User
+
 from app import db, bcrypt
 from werkzeug.utils import secure_filename
 import os, cv2, numpy as np
-
+from deepface import DeepFace
 
 routes = Blueprint("routes", __name__)
 
@@ -43,19 +44,6 @@ def check_image_quality(image):
     return True, "Good"
 
 def detect_faces_dnn(image_path, confidence_threshold=0.2, min_faces=1):
-    """
-    Detects faces in an image using OpenCV's DNN face detector.
-
-    Parameters:
-    - image_path (str): Path to the input image.
-    - confidence_threshold (float): Minimum confidence for detecting a face.
-    - min_faces (int): Minimum number of faces required for successful detection.
-
-    Returns:
-    - detected_image (numpy.ndarray): Image with detected faces drawn.
-    - face_boxes (list): List of detected face bounding boxes [(x, y, x1, y1)].
-    - status (str): "Success" if all faces detected properly, "Failed" otherwise.
-    """
     # Read the image
     image = cv2.imread(image_path)
     if image is None:
@@ -93,7 +81,15 @@ def detect_faces_dnn(image_path, confidence_threshold=0.2, min_faces=1):
 
         for i in range(detections.shape[2]):
             confidence = detections[0, 0, i, 2]
-            if confidence > confidence_threshold:
+            if confidence > confidence_threshold:  # Ensure confidence is above threshold
+                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+                (x, y, x1, y1) = box.astype("int")
+                # Expand the bounding box slightly
+                x = max(0, x - 10)
+                y = max(0, y - 10)
+                x1 = min(w, x1 + 10)
+                y1 = min(h, y1 + 10)
+
                 box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
                 (x, y, x1, y1) = box.astype("int")
                 face_boxes.append((x, y, x1, y1))
@@ -112,14 +108,54 @@ def detect_faces_dnn(image_path, confidence_threshold=0.2, min_faces=1):
     print(f"⚠️ Faces detected: {detected_faces}. Rejecting image!")
     return None, [], "Failed"
 
+def detect_genders(image_path, face_boxes):
+    image = cv2.imread(image_path)
+    if image is None:
+        return jsonify({"error": "Image could not be loaded."})
+
+    male_count = 0
+    female_count = 0
+    unidentified_count = 0
+
+    for (x, y, x1, y1) in face_boxes:
+        face = image[y:y1, x:x1]  # Crop face region
+        if face.size == 0:  
+            continue  # Skip if invalid face extraction
+
+        face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
+        try:
+            analysis = DeepFace.analyze(face_rgb, actions=['gender'], enforce_detection=False)
+            gender = analysis[0]['dominant_gender']  # Get dominant gender
+
+            if gender == "Man":
+                male_count += 1
+            elif gender == "Woman":
+                female_count += 1
+            else:
+                unidentified_count += 1
+
+        except Exception as e:
+            print(f"Error in gender detection: {e}")
+            unidentified_count += 1  # Count as unidentified if analysis fails
+
+    return  {
+        "male": male_count,
+        "female": female_count,
+        "unidentified": unidentified_count
+    }
+
 @routes.route('/register', methods=['GET', 'POST'])
 def register():
     print("Register route accessed")  # Debugging
+    # Restore previous logic for user registration
+
     if request.method == 'POST':
         email = request.form.get("email")
         password = request.form.get("password")
         confirm_password = request.form.get("confirm_password")
         print(f"Received: {email}, {password}, {confirm_password}")  # Debugging
+        print("Checking if user already exists...")  # Debugging
+
 
         # Validation
         if not email or not password or not confirm_password:
@@ -134,15 +170,20 @@ def register():
         # Check if user already exists
         existing_user = User.query.filter_by(email=email).first()
         if existing_user:
+            print("User already exists.")  # Debugging
+
             flash("Email already registered!", "danger")
             return redirect(url_for('routes.register'))
        
-        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')  # Hash the password
+
 
         # Create new user object
-        new_user = User(email=email, password=hashed_password, verified=False)
+        new_user = User(email=email, password=hashed_password, verified=False) 
         db.session.add(new_user)
         db.session.commit()  # ✅ Commit before sending email
+        print("User created successfully and committed to the database.")  # Debugging
+    
 
         try:
             # Generate verification token
@@ -199,6 +240,8 @@ def login():
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
+        # Restore previous logic for user login
+
 
         user = User.query.filter_by(email=email).first()
         if not user:
@@ -209,7 +252,8 @@ def login():
             flash("Please verify your email before logging in.", "warning")
             return redirect(url_for('routes.login'))
 
-        if bcrypt.check_password_hash(user.password, password):
+        if bcrypt.check_password_hash(user.password, password):  # Check the hashed password
+
             session['user_id'] = user.id
             return redirect(url_for('routes.upload'))
         else:
@@ -220,9 +264,12 @@ def login():
 
 @routes.route('/upload', methods=['GET', 'POST'])
 def upload():
+    genders = None
     if 'user_id' not in session:
         flash("You must be logged in to access this page!", "danger")
         return redirect(url_for('routes.login'))
+        # Restore previous logic for image upload
+
     
     if request.method == 'POST':
         file = request.files['file-upload']
@@ -234,27 +281,31 @@ def upload():
         image = cv2.imread(file_path)
         if image is None:
             flash("Invalid image file!", "danger")
-            return redirect(url_for('routes.upload'))
+            return redirect(url_for('routes.upload'), genders=genders)
         
         # ✅ Check image quality
         quality_status, message = check_image_quality(image)
         if quality_status == False:
             os.remove(file_path)  # Delete the image
-            flash(f"Image quality is too low: {message}", "warning")
-            return redirect(url_for('routes.upload'))
+            flash(f"{message}", "warning")
+            return redirect(url_for('routes.upload'),  genders=genders)
 
         # ✅ Detect Faces
         image, face_boxes, status = detect_faces_dnn(file_path)
         if status == "Failed" or len(face_boxes) == 0:
             os.remove(file_path)  # Delete the image
             flash("No clear human faces detected! Please upload a better image.", "warning")
-            return redirect(url_for('routes.upload'))
+            return redirect(url_for('routes.upload'), genders=genders)
         
+        # ✅ Detect Genders
+        genders = detect_genders(file_path, face_boxes)
 
-        # ✅ Show success message
-        flash(f"Image uploaded successfully! {len(face_boxes)} clear face(s) detected.", "success")
-        return redirect(url_for('routes.upload'))
-    return render_template("upload.html")
+        
+         # ✅ Show success message
+        flash(f"Image uploaded successfully! {len(face_boxes)} face(s) detected.", "success")
+        return render_template("upload.html", genders=genders, num_faces=len(face_boxes))
+    return render_template("upload.html", genders=genders)
+
 
 
 @routes.route('/static/<path:filename>')
@@ -269,4 +320,3 @@ def logout():
 @routes.route('/')
 def home():
     return render_template('home.html')
-

@@ -103,7 +103,7 @@
         <div class="sidebar-nav">
 
 
-            <!-- User Profile (Avatar + Email) -->
+
             <div class="sidebar-item d-flex align-items-center">
                 <div>
                     <span class="fw-bold">
@@ -157,8 +157,13 @@
 
         // Sidebar Toggle Function
         document.getElementById("sidebarCollapse").addEventListener("click", function () {
-            document.getElementById("sidebar").classList.toggle("sidebar-hidden");
-            document.getElementById("content").classList.toggle("content-full");
+            const sidebar = document.getElementById("sidebar");
+            const content = document.getElementById("content");
+            if (sidebar && content) {
+                sidebar.classList.toggle("sidebar-hidden");
+                content.classList.toggle("content-full");
+            }
+
         });
     </script>
 

@@ -1,7 +1,6 @@
 {% extends "Home.html" %}
 {% block body %}
 
-
 <div class="container mt-5">
     <div class="row justify-content-center">
         <div class="col-lg-8 col-md-10 col-12 text-center">
@@ -32,13 +31,20 @@
                 <img id="image-preview" class="img-fluid mt-3 d-none rounded shadow-sm" alt="Preview">
                 <button type="submit" class="btn btn-primary w-100 mt-3" id="upload-btn"
                     title="Upload the selected image">
-
                     <i class="bi bi-upload"></i> Upload Image
                 </button>
             </form>
             <p class="text-success text-center mt-3 d-none" id="upload-success">
                 ✅ Image uploaded successfully! Processing...
             </p>
+            <!-- Show total gender counts -->
+            <div class="gender-counts mt-4">
+                <p><strong>Male Count:</strong> {{ genders.male }}</p>
+                <p><strong>Female Count:</strong> {{ genders.female }}</p>
+                <p><strong>Unidentified Count:</strong> {{ genders.unidentified }}</p>  <!-- Updated line for unidentified count -->
+
+            </div>
+
         </div>
     </div>
 </div>
