@@ -134,11 +134,7 @@ def detect_genders(image_path, face_boxes):
             face_rgb = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB)
 
             # Perform gender analysis with DeepFace
-<<<<<<< HEAD
-            analysis = DeepFace.analyze(face_rgb, actions=['gender'], enforce_detection=False)
-=======
             analysis = DeepFace.analyze(face, actions=['gender'], detector_backend='retinaface', enforce_detection=False)
->>>>>>> working
 
             # Extract the detected gender
             gender = analysis[0]['dominant_gender']  
@@ -146,17 +142,10 @@ def detect_genders(image_path, face_boxes):
             print(f"Detected Gender: {gender}")  # Debugging output
 
             # Normalize gender classification to prevent mislabeling
-<<<<<<< HEAD
-            gender = gender.lower()
-            if "man" in gender:
-                male_count += 1
-            elif "woman" in gender:
-=======
             # gender = gender.lower()
             if "Man" in gender:
                 male_count += 1
             if "Woman" in gender:
->>>>>>> working
                 female_count += 1
             
 
