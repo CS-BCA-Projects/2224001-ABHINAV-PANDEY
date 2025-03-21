@@ -2,13 +2,18 @@ from flask import jsonify, Blueprint, request, render_template, flash, redirect,
 from flask_mail import Message
 from app import mail, generate_verification_token, confirm_verification_token
 from app.models import User
-
-from app import db, bcrypt
+from app import db, bcrypt, cache
 from werkzeug.utils import secure_filename
 import os, cv2, numpy as np
 from deepface import DeepFace
 
+
 routes = Blueprint("routes", __name__)
+# Flask app initialize hone ke baad cache clear karna
+@routes.route('/clear_cache')
+def clear_cache():
+    cache.clear()
+    return "Cache cleared successfully!"
 
 def register_routes(app):
     app.register_blueprint(routes)
@@ -25,7 +30,7 @@ def check_image_quality(image):
     # 1️⃣ **Check Sharpness (Blurriness)**
     laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
     print(laplacian_var)
-    if laplacian_var < 1700:  
+    if laplacian_var < 50:  
         return False, f"Image is too blurry! (Sharpness Score: {laplacian_var:.2f})"
 
     # 2️⃣ **Check Brightness**
@@ -43,7 +48,7 @@ def check_image_quality(image):
 
     return True, "Good"
 
-def detect_faces_dnn(image_path, confidence_threshold=0.2, min_faces=1):
+def detect_faces_dnn(image_path, confidence_threshold=0.5, min_faces=1):
     # Read the image
     image = cv2.imread(image_path)
     if image is None:
@@ -111,37 +116,46 @@ def detect_faces_dnn(image_path, confidence_threshold=0.2, min_faces=1):
 def detect_genders(image_path, face_boxes):
     image = cv2.imread(image_path)
     if image is None:
-        return jsonify({"error": "Image could not be loaded."})
+        return {"error": "Image could not be loaded."}
 
     male_count = 0
     female_count = 0
-    unidentified_count = 0
 
     for (x, y, x1, y1) in face_boxes:
         face = image[y:y1, x:x1]  # Crop face region
         if face.size == 0:  
             continue  # Skip if invalid face extraction
 
-        face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
         try:
-            analysis = DeepFace.analyze(face_rgb, actions=['gender'], enforce_detection=False)
-            gender = analysis[0]['dominant_gender']  # Get dominant gender
+            # Resize face to ensure a standardized input size
+            face_resized = cv2.resize(face, (224, 224))  
 
-            if gender == "Man":
+            # Convert BGR to RGB as DeepFace expects RGB images
+            face_rgb = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB)
+
+            # Perform gender analysis with DeepFace
+            analysis = DeepFace.analyze(face, actions=['gender'], detector_backend='retinaface', enforce_detection=False)
+
+            # Extract the detected gender
+            gender = analysis[0]['dominant_gender']  
+            
+            print(f"Detected Gender: {gender}")  # Debugging output
+
+            # Normalize gender classification to prevent mislabeling
+            # gender = gender.lower()
+            if "Man" in gender:
                 male_count += 1
-            elif gender == "Woman":
+            if "Woman" in gender:
                 female_count += 1
-            else:
-                unidentified_count += 1
+            
 
         except Exception as e:
             print(f"Error in gender detection: {e}")
-            unidentified_count += 1  # Count as unidentified if analysis fails
+            
 
-    return  {
+    return {
         "male": male_count,
         "female": female_count,
-        "unidentified": unidentified_count
     }
 
 @routes.route('/register', methods=['GET', 'POST'])
@@ -281,24 +295,26 @@ def upload():
         image = cv2.imread(file_path)
         if image is None:
             flash("Invalid image file!", "danger")
-            return redirect(url_for('routes.upload'), genders=genders)
+            return redirect(url_for('routes.upload'))
         
-        # ✅ Check image quality
-        quality_status, message = check_image_quality(image)
-        if quality_status == False:
-            os.remove(file_path)  # Delete the image
-            flash(f"{message}", "warning")
-            return redirect(url_for('routes.upload'),  genders=genders)
 
         # ✅ Detect Faces
-        image, face_boxes, status = detect_faces_dnn(file_path)
+        
+        returned_values = detect_faces_dnn(file_path)
+
+        if len(returned_values) == 3:
+            image, face_boxes, status = returned_values
+        else:
+            print(f"⚠️ Unexpected return format: {returned_values}")
+            image, face_boxes, status = None, [], "Error"
         if status == "Failed" or len(face_boxes) == 0:
             os.remove(file_path)  # Delete the image
             flash("No clear human faces detected! Please upload a better image.", "warning")
-            return redirect(url_for('routes.upload'), genders=genders)
+            return redirect(url_for('routes.upload'))
         
         # ✅ Detect Genders
         genders = detect_genders(file_path, face_boxes)
+        
 
         
          # ✅ Show success message
