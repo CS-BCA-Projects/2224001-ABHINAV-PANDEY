@@ -1,45 +1,46 @@
 from flask import Flask
 from flask_bcrypt import Bcrypt
-from app.config import Config
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail
-from itsdangerous import URLSafeTimedSerializer
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from flask_migrate import Migrate
-from flask_caching import Cache
+from app.config import Config
 
-
+# Initialize extensions
 db = SQLAlchemy()
 bcrypt = Bcrypt()
 mail = Mail()
 migrate = Migrate()
-cache = Cache()
-# Initialize Flask App
+
 def create_app():
+    """Create and configure the Flask application."""
     app = Flask(__name__, template_folder="templates")
-    app.config.from_object(Config)  # Load configuration with previous settings restored
-    app.config["CACHE_TYPE"] = "simple"
-    cache.init_app(app)
-    db.init_app(app)  # Initialize the database with the app
+    app.config.from_object(Config)  # Load configurations
+
+    # Initialize Flask extensions
+    db.init_app(app)
     bcrypt.init_app(app)
     mail.init_app(app)
-    migrate.init_app(app, db) 
-    with app.app_context():
-        from app.routes import register_routes
+    migrate.init_app(app, db)
+
+    # Import and register routes
+    from app.routes import register_routes
     register_routes(app)
+
     return app
 
-# Function to generate tokens
 def generate_verification_token(email):
+    """Generate a time-sensitive verification token for email confirmation."""
     serializer = URLSafeTimedSerializer(Config.SECRET_KEY)
     return serializer.dumps(email, salt="email-confirmation")
 
-
-
-# Function to confirm tokens
 def confirm_verification_token(token, expiration=3600):
+    """Verify and decode the email confirmation token."""
     serializer = URLSafeTimedSerializer(Config.SECRET_KEY)
     try:
         email = serializer.loads(token, salt="email-confirmation", max_age=expiration)
         return email
-    except:
-        return None
+    except SignatureExpired:
+        return None  # Token expired
+    except BadSignature:
+        return None  # Invalid token

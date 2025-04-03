@@ -1,19 +1,14 @@
-from flask import jsonify, Blueprint, request, render_template, flash, redirect, url_for, session, send_from_directory, current_app 
+from flask import Blueprint, request, render_template, flash, redirect, url_for, session, send_from_directory, current_app 
 from flask_mail import Message
 from app import mail, generate_verification_token, confirm_verification_token
 from app.models import User
-from app import db, bcrypt, cache
+from app import db, bcrypt
 from werkzeug.utils import secure_filename
 import os, cv2, numpy as np
 from deepface import DeepFace
 
 
 routes = Blueprint("routes", __name__)
-# Flask app initialize hone ke baad cache clear karna
-@routes.route('/clear_cache')
-def clear_cache():
-    cache.clear()
-    return "Cache cleared successfully!"
 
 def register_routes(app):
     app.register_blueprint(routes)
