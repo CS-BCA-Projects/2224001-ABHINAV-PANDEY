@@ -262,8 +262,8 @@ def login():
             return redirect(url_for('routes.login'))
 
         if bcrypt.check_password_hash(user.password, password):  # Check the hashed password
-
             session['user_id'] = user.id
+            flash("Logged in successfully!", "success")  
             return redirect(url_for('routes.upload'))
         else:
             flash("Invalid password!", "danger")
