@@ -28,14 +28,14 @@ def check_image_quality(image):
     if laplacian_var < 50:  
         return False, f"Image is too blurry! (Sharpness Score: {laplacian_var:.2f})"
 
-    # 2️⃣ **Check Brightness**
+    # **Check Brightness**
     brightness = np.mean(gray)
     if brightness < 40:
         return False, f"Image is too dark! (Brightness: {brightness:.2f})"
     elif brightness > 200:
         return False, f"Image is overexposed! (Brightness: {brightness:.2f})"
 
-    # 3️⃣ **Check Image Resolution**
+    # **Check Image Resolution**
     h, w = image.shape[:2]
     if h < 512 or w < 512:
         image = cv2.resize(image, (512, 512), interpolation=cv2.INTER_AREA)
@@ -52,9 +52,9 @@ def detect_faces_dnn(image_path, confidence_threshold=0.5, min_faces=1):
     # **Check Image Quality First**
     quality_status, message = check_image_quality(image)
     if quality_status == False:
-        return f"⚠️ Image Rejected: {message}"
+        return f"Image Rejected: {message}"
 
-    print("✅ Image Quality Check Passed. Proceeding with detection...")
+    print("Image Quality Check Passed. Proceeding with detection...")
     # Load the pre-trained DNN model
     prototxt_path = os.path.join(current_app.root_path, "models/deploy.prototxt")
     model_path = os.path.join(current_app.root_path, "models/res10_300x300_ssd_iter_140000.caffemodel")
@@ -102,10 +102,10 @@ def detect_faces_dnn(image_path, confidence_threshold=0.5, min_faces=1):
                             0.5, (0, 255, 0), 2)
 
         if detected_faces >= min_faces:
-            print(f"✅ {detected_faces} faces detected. Accepting image.")
+            print(f" {detected_faces} faces detected. Accepting image.")
             return image, face_boxes, "Success"
 
-    print(f"⚠️ Faces detected: {detected_faces}. Rejecting image!")
+    print(f"Faces detected: {detected_faces}. Rejecting image!")
     return None, [], "Failed"
 
 def detect_genders(image_path, face_boxes):
@@ -190,7 +190,7 @@ def register():
         # Create new user object
         new_user = User(email=email, password=hashed_password, verified=False) 
         db.session.add(new_user)
-        db.session.commit()  # ✅ Commit before sending email
+        db.session.commit()  # Commit before sending email
         print("User created successfully and committed to the database.")  # Debugging
     
 
@@ -282,37 +282,40 @@ def upload():
     
     if request.method == 'POST':
         file = request.files['file-upload']
+        if file is None or file.filename == '':
+            flash('Please select an image to upload', 'error')
+            return redirect(url_for('routes.upload'))
         filename = secure_filename(file.filename)
         file_path = (os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
         file.save(file_path)
         
-        # ✅ Read image properly before checking quality
+        # Read image properly before checking quality
         image = cv2.imread(file_path)
         if image is None:
             flash("Invalid image file!", "danger")
             return redirect(url_for('routes.upload'))
         
 
-        # ✅ Detect Faces
+        # Detect Faces
         
         returned_values = detect_faces_dnn(file_path)
 
         if len(returned_values) == 3:
             image, face_boxes, status = returned_values
         else:
-            print(f"⚠️ Unexpected return format: {returned_values}")
+            print(f" Unexpected return format: {returned_values}")
             image, face_boxes, status = None, [], "Error"
         if status == "Failed" or len(face_boxes) == 0:
             os.remove(file_path)  # Delete the image
             flash("No clear human faces detected! Please upload a better image.", "warning")
             return redirect(url_for('routes.upload'))
         
-        # ✅ Detect Genders
+        # Detect Genders
         genders = detect_genders(file_path, face_boxes)
         
 
         
-         # ✅ Show success message
+         # Show success message
         flash(f"Image uploaded successfully! {len(face_boxes)} face(s) detected.", "success")
         return render_template("upload.html", genders=genders, num_faces=len(face_boxes))
     return render_template("upload.html", genders=genders)
